@@ -1379,12 +1379,14 @@ select.input {
   margin-left: 6px;
 }
 .library-toolbar {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 13px;
   margin-bottom: 24px;
 }
 .search-box {
+  min-width: 200px;
   position: relative;
   flex: 1;
 }

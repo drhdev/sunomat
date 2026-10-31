@@ -66,6 +66,7 @@ import { formatValidationError, parseSetup } from "../shared/setup";
 import { credentialsSchema } from "../shared/identity";
 import { VersionComparison } from "./components/version-comparison";
 import { LibraryTransfer } from "./components/library-transfer";
+import { selectProjects, type LibrarySort } from "../shared/library-view";
 import { AccountSettings } from "./components/account-settings";
 
 type View = "compose" | "library" | "guide";
@@ -129,6 +130,11 @@ export default function App() {
   const [tagQuery, setTagQuery] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState<LibrarySort>("newest");
+  const [minimumRating, setMinimumRating] = useState(0);
+  const visibleProjects = selectProjects(projects, {
+    query, filter, sort, minimumRating,
+  });
   const [history, setHistory] = useState<Saved[] | null>(null);
   const [historyName, setHistoryName] = useState("");
   const [comparison, setComparison] = useState<{
@@ -253,6 +259,8 @@ export default function App() {
     setPending(null);
     setQuery("");
     setFilter("all");
+    setSort("newest");
+    setMinimumRating(0);
     setError("");
     notify(message);
   }
@@ -1731,10 +1739,23 @@ export default function App() {
                       onChange={(e) => setFilter(e.target.value)}
                     >
                       <option value="all">All projects</option>
+                      <option value="song">Songs</option>
                       <option value="template">Templates</option>
+                      <option value="idea">Ideas</option>
+                      <option value="draft">Drafts</option>
                       <option value="favorite">Favorites</option>
                       <option value="finished">Finished</option>
                       <option value="testing">Testing</option>
+                    </select>
+                    <select className="input library-filter" aria-label="Minimum result rating" value={minimumRating} onChange={(e) => setMinimumRating(Number(e.target.value))}>
+                      <option value={0}>Any rating</option>
+                      {[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}+ stars</option>)}
+                    </select>
+                    <select className="input library-filter" aria-label="Sort saved projects" value={sort} onChange={(e) => setSort(e.target.value as LibrarySort)}>
+                      <option value="newest">Newest saved</option>
+                      <option value="oldest">Oldest saved</option>
+                      <option value="rating">Highest rated</option>
+                      <option value="title">Title A–Z</option>
                     </select>
                     <Badge>{usage} / 100 versions</Badge>
                     <Button
@@ -1772,17 +1793,7 @@ export default function App() {
                     </Card>
                   ) : (
                     <div className="library-grid">
-                      {projects
-                        .filter(
-                          (p) =>
-                            (filter === "all" ||
-                              (filter === "favorite" && p.song.favorite) ||
-                              p.song.kind === filter ||
-                              p.song.stage === filter) &&
-                            `${p.song.title} ${p.song.style} ${p.song.notes} ${p.name}`
-                              .toLowerCase()
-                              .includes(query.toLowerCase()),
-                        )
+                      {visibleProjects
                         .map((p) => (
                           <Card className="project-card" key={p.projectId}>
                             <div className="project-top">
@@ -1865,21 +1876,11 @@ export default function App() {
                         ))}
                     </div>
                   )}
-                  {projects.length > 0 &&
-                    !projects.some(
-                      (p) =>
-                        (filter === "all" ||
-                          (filter === "favorite" && p.song.favorite) ||
-                          p.song.kind === filter ||
-                          p.song.stage === filter) &&
-                        `${p.song.title} ${p.song.style} ${p.song.notes} ${p.name}`
-                          .toLowerCase()
-                          .includes(query.toLowerCase()),
-                    ) && (
-                      <p className="empty-results">
-                        No projects match. Try another search or filter.
-                      </p>
-                    )}
+                  {projects.length > 0 && visibleProjects.length === 0 && (
+                    <p className="empty-results">
+                      No projects match. Try another search or filter.
+                    </p>
+                  )}
                 </>
               )}
             </>

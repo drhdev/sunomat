@@ -30,7 +30,14 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - [x] 17. Self-service account deletion: password plus email confirmation, owner-only transactional removal of records and sessions, clear backup guidance and complete browser-state cleanup.
 - [x] 18. Verify and deliver account management: API isolation, session invalidation, failed-operation rollback and concurrency, English mobile forms, regression checks, documentation and push to main.
 
+## Library discovery chunks
+
+- [x] 19. Library discovery: combined minimum-rating and project filters, all production stages, stable date/rating/title sorting and context search, without changing saved snapshots.
+- [ ] 20. Verify and deliver discovery: unit and mobile browser coverage, full regression checks, production build, documentation and push to main.
+
 ## Verification record
+
+- 2026-10-31 library discovery: added combined minimum-rating and project/stage filters, numeric English title/date/rating sorting and context search over latest snapshots. `npm test` passed 22 tests; production build/typecheck passed; Chromium passed all 11 workflows, including combined filters at 375px, empty results, no horizontal overflow and unchanged storage usage. Browser JS is approximately 143 KB gzip. No dependencies, migrations or runtime services were added.
 
 - 2026-10-31: repository inspected (initial LICENSE only). Research retrieved from Sonoya, Suno help and comparable builders. Implementation started.
 - 2026-10-31: chunks 1–7 implemented. `npm test`: 6 tests passed, including ownership isolation, immutable history, optimistic concurrency, a race for slot 100, schema limits, CSRF, session expiry, throttling and conditional handoff.
