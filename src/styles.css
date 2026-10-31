@@ -2462,6 +2462,72 @@ select.input {
     font-size: 9px;
   }
 }
+.account-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 23px 0 18px;
+}
+.account-overview > div {
+  display: flex;
+  gap: 6px;
+}
+.account-section {
+  border-top: 1px solid var(--border);
+  padding-top: 22px;
+}
+.account-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.account-section > p,
+.account-danger > p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.9;
+  margin: 9px 0 20px;
+}
+.account-section .field,
+.account-danger .field {
+  margin-bottom: 16px;
+}
+.account-success {
+  padding: 12px;
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--soft);
+  font-size: 11px;
+}
+.account-danger {
+  margin-top: 25px;
+  border-top: 1px solid var(--border);
+  padding-top: 17px;
+}
+.account-danger > summary {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  cursor: pointer;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 550;
+}
+.account-danger[open] > summary {
+  margin-bottom: 16px;
+}
+@media (max-width: 760px) {
+  .account-section .input,
+  .account-danger .input {
+    font-size: 16px;
+    min-height: 42px;
+  }
+}
 .library-transfer {
   margin-bottom: 18px;
 }

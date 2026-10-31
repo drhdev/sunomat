@@ -3,20 +3,18 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import {
-  randomBytes,
-  randomUUID,
-  scrypt as scryptCallback,
-  timingSafeEqual,
-  createHash,
-} from "node:crypto";
-import { promisify } from "node:util";
+import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import { z } from "zod";
 import { songSchema } from "../shared/song.js";
 import { ApiError, createStore } from "./store.js";
-import { credentialsSchema } from "../shared/identity.js";
+import {
+  credentialsSchema,
+  passwordChangeSchema,
+  deleteAccountSchema,
+} from "../shared/identity.js";
+import { hashPassword, verifyPassword } from "./passwords.js";
 import { formatValidationError } from "../shared/setup.js";
 import {
   librarySchema,
@@ -24,7 +22,6 @@ import {
   MAX_LIBRARY_BYTES,
 } from "../shared/library.js";
 
-const scrypt = promisify(scryptCallback);
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const saveSchema = z.object({
   song: songSchema,
@@ -49,7 +46,6 @@ export function createApp(config: Config) {
   const clientDir = resolve(config.clientDir || "dist/client");
   const secure = config.secureCookies ?? false;
   const cookieName = secure ? "__Host-sunomat" : "sunomat";
-  const dummySalt = randomBytes(16).toString("hex");
   const cleanup = setInterval(() => {
     store.db.prepare("DELETE FROM sessions WHERE expires_at<?").run(Date.now());
     for (const [k, v] of attempts) if (v.until < Date.now()) attempts.delete(k);
@@ -79,25 +75,56 @@ export function createApp(config: Config) {
       throw new ApiError(400, "Invalid JSON");
     }
   }
-  function session(req: IncomingMessage): User | null {
+  function sessionHash(req: IncomingMessage): string | null {
     const token = req.headers.cookie
       ?.split(";")
       .map((c) => c.trim())
       .find((c) => c.startsWith(`${cookieName}=`))
       ?.slice(cookieName.length + 1);
     if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
+    return hash(token);
+  }
+  function session(req: IncomingMessage): User | null {
+    const tokenHash = sessionHash(req);
+    if (!tokenHash) return null;
     return (
       (store.db
         .prepare(
           "SELECT u.id,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
         )
-        .get(hash(token), Date.now()) as User | undefined) || null
+        .get(tokenHash, Date.now()) as User | undefined) || null
     );
   }
   function requireUser(req: IncomingMessage) {
     const u = session(req);
     if (!u) throw new ApiError(401, "Sign in to access your private library");
     return u;
+  }
+  function reservePasswordSlot() {
+    if (authPending.count >= 8)
+      throw new ApiError(429, "Account service is busy. Try again shortly.");
+    authPending.count++;
+  }
+  function requireUnchangedAccount(
+    userId: string,
+    password: string,
+    tokenHash: string,
+  ) {
+    const live = store.db
+      .prepare(
+        "SELECT u.password FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND s.token_hash=? AND s.expires_at>?",
+      )
+      .get(userId, tokenHash, Date.now()) as { password: string } | undefined;
+    if (!live)
+      throw new ApiError(
+        401,
+        "Your session has expired. Sign in again to continue.",
+      );
+    if (live.password !== password)
+      throw new ApiError(
+        409,
+        "Your account credentials changed. Sign in again before retrying.",
+      );
   }
   function csrf(req: IncomingMessage) {
     // Browser mutations require an exact Origin; no forwarded Host trust.
@@ -172,22 +199,16 @@ export function createApp(config: Config) {
           rate(`email:${data.email}`, 12);
           // socket identity cannot be spoofed with X-Forwarded-For; a proxy shares the broader IP allowance.
           rate(`ip:${req.socket.remoteAddress || "unknown"}`, 150);
-          if (authPending.count >= 8)
-            throw new ApiError(
-              429,
-              "Sign-in service is busy. Try again shortly.",
-            );
           if (path === "/api/register" && config.registration === false)
             throw new ApiError(403, "Registration is disabled");
-          authPending.count++;
+          reservePasswordSlot();
           let user: User;
           try {
             const existing = store.db
               .prepare("SELECT id,email,password FROM users WHERE email=?")
               .get(data.email) as (User & { password: string }) | undefined;
             if (path === "/api/register") {
-              const salt = randomBytes(16).toString("hex");
-              const key = (await scrypt(data.password, salt, 64)) as Buffer;
+              const encoded = await hashPassword(data.password);
               if (existing)
                 throw new ApiError(
                   409,
@@ -197,7 +218,7 @@ export function createApp(config: Config) {
               try {
                 store.db
                   .prepare("INSERT INTO users(id,email,password) VALUES(?,?,?)")
-                  .run(user.id, user.email, `${salt}:${key.toString("hex")}`);
+                  .run(user.id, user.email, encoded);
               } catch (e) {
                 if (String(e).includes("UNIQUE"))
                   throw new ApiError(
@@ -207,15 +228,11 @@ export function createApp(config: Config) {
                 throw e;
               }
             } else {
-              const [salt, stored] = existing?.password.split(":") || [
-                dummySalt,
-                "00".repeat(64),
-              ];
-              const key = (await scrypt(data.password, salt, 64)) as Buffer;
-              if (
-                !existing ||
-                !timingSafeEqual(key, Buffer.from(stored, "hex"))
-              )
+              const valid = await verifyPassword(
+                data.password,
+                existing?.password,
+              );
+              if (!existing || !valid)
                 throw new ApiError(401, "Email or password is incorrect");
               user = { id: existing.id, email: existing.email };
             }
@@ -265,6 +282,68 @@ export function createApp(config: Config) {
           return;
         }
         const user = requireUser(req);
+        if (
+          (path === "/api/account/password" && method === "POST") ||
+          (path === "/api/account" && method === "DELETE")
+        ) {
+          const change = path === "/api/account/password";
+          const input = await body(req);
+          const data = change
+            ? passwordChangeSchema.parse(input)
+            : deleteAccountSchema.parse(input);
+          if (
+            "confirmationEmail" in data &&
+            data.confirmationEmail !== user.email
+          )
+            throw new ApiError(
+              400,
+              "The confirmation email does not match this account.",
+            );
+          rate(`account:${user.id}`, 12);
+          rate(`ip:${req.socket.remoteAddress || "unknown"}`, 150);
+          reservePasswordSlot();
+          try {
+            const existing = store.db
+              .prepare("SELECT password FROM users WHERE id=?")
+              .get(user.id) as { password: string } | undefined;
+            const valid = await verifyPassword(
+              data.currentPassword,
+              existing?.password,
+            );
+            if (!existing || !valid)
+              throw new ApiError(401, "Current password is incorrect.");
+            const encoded =
+              "newPassword" in data
+                ? await hashPassword(data.newPassword)
+                : null;
+            const tokenHash = sessionHash(req)!;
+            store.db.exec("BEGIN IMMEDIATE");
+            try {
+              requireUnchangedAccount(user.id, existing.password, tokenHash);
+              if (encoded) {
+                store.db
+                  .prepare("UPDATE users SET password=? WHERE id=?")
+                  .run(encoded, user.id);
+                store.db
+                  .prepare(
+                    "DELETE FROM sessions WHERE user_id=? AND token_hash<>?",
+                  )
+                  .run(user.id, tokenHash);
+              } else {
+                store.db.prepare("DELETE FROM users WHERE id=?").run(user.id);
+              }
+              store.db.exec("COMMIT");
+            } catch (error) {
+              store.db.exec("ROLLBACK");
+              throw error;
+            }
+            if (!change) cookie(res, "", 0);
+            json(res, 200, { ok: true });
+          } finally {
+            authPending.count--;
+          }
+          return;
+        }
         if (path === "/api/library/export" && method === "GET") {
           json(res, 200, store.exportLibrary(user.id));
           return;

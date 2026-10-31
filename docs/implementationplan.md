@@ -24,6 +24,12 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - [x] 14. Additive library restore: preview contents, preserve history order and timestamps, generate new identities, enforce quota atomically and never overwrite existing projects.
 - [x] 15. Verification and delivery: test archive validation, account isolation, round-trip fidelity, quota/rollback, browser download/import and account switching; document and push to main.
 
+## Account management chunks
+
+- [x] 16. Authenticated password change: current-password confirmation, shared validation, bounded password work and revocation of other sessions; preserve the current session.
+- [x] 17. Self-service account deletion: password plus email confirmation, owner-only transactional removal of records and sessions, clear backup guidance and complete browser-state cleanup.
+- [ ] 18. Verify and deliver account management: API isolation, session invalidation, failed-operation rollback and concurrency, English mobile forms, regression checks, documentation and push to main.
+
 ## Verification record
 
 - 2026-10-31: repository inspected (initial LICENSE only). Research retrieved from Sonoya, Suno help and comparable builders. Implementation started.
@@ -40,6 +46,8 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - Actual Coolify deployment/domain TLS cannot be verified without access to the user's Coolify server; deployment is an operator step, not an unfinished code chunk.
 - 2026-10-31 library portability: implemented owner-only full-history JSON export and additive transactional restore, with a mobile preview, account-switch-safe downloads, new identities, preserved timestamps/order and the same 100-version quota. Archives contain no account records or sessions. Existing projects are never changed; repeated imports intentionally create additional copies and the preview explains this.
 - 2026-10-31 library checks: `npm test` passed 14 tests, including authenticated export isolation, exact version/template round trips, archives above the ordinary 80 KB request cap, malformed/empty archives, quota rejection, rollback after a simulated second-project write failure and release of the single-import slot after validation failure. Production build/typecheck passed. Chromium passed 9 workflows including complete library download and restore at 375px, duplicate-copy warnings, client quota guards and suppression of a delayed export after switching accounts. Browser JS is approximately 141 KB gzip. No dependencies, services or migrations were added. Implementation commit `235cbde` was successfully pushed to `main`; library portability chunks 13–15 are complete.
+- 2026-10-31 account management: added current-password-protected password change and typed-email/password-confirmed account deletion. Password changes preserve the current session's existing expiry and revoke other sessions. Transactions recheck live session and credential hash after asynchronous derivation; failures and competing updates cannot silently replace credentials or partially remove records. Deletion cascades only the authenticated owner's account/library/sessions and clears their browser workspace. Shared scrypt helpers retain compatibility with existing hashes and the operator reset script. No migration, dependency or service was added.
+- 2026-10-31 account checks: `npm test` passed 21 tests, including salted/malformed hash handling, current-password proof, CSRF, session revocation, competing changes, revoked-session rejection, rollback of password updates and cascading deletion, owner isolation, re-registration without old data and account throttling. Production build/typecheck passed. Chromium passed 10 workflows, including English account validation and account deletion at 375px in a `de-DE` browser. Documentation covers library/draft export before deletion, retained external backups and operator-assisted forgotten-password recovery. Browser JS is approximately 143 KB gzip. Chunk 18 awaits only remote synchronization.
 
 ## Follow-up procedure
 

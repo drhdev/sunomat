@@ -91,10 +91,12 @@ React/TypeScript/Vite build to static assets. Node's HTTP server serves both ass
 - `shared/library.ts`: versioned full-library archive schema, per-project/version validation and the 100-version archive bound.
 - `server/store.ts`: versioned DB migration, ownership checks, immutable saves, quota and optimistic conflict checks.
 - `server/app.ts`: HTTP routing, auth, sessions, validation, rate limits, security headers, static files.
+- `server/passwords.ts`: shared asynchronous salted scrypt hashing and constant-time verification, compatible with existing accounts and the operator reset script.
 - `server/index.ts`: environment validation and graceful shutdown.
 - `src/components/ui/primitives.tsx`: locally owned shadcn composition and Radix dialog behavior.
 - `src/components/version-comparison.tsx`: read-only side-by-side changes between an earlier saved version and the latest snapshot.
 - `src/components/library-transfer.tsx`: private full-library download, file validation, quota preview and additive restore. Account-keyed lifetime checks ignore delayed downloads after account changes or navigation away.
+- `src/components/account-settings.tsx`: current-password-protected password changes and explicitly confirmed account deletion, with English validation and complete field cleanup.
 - `src/App.tsx`: composer/library/guide workflows. Render helpers are invoked as functions to avoid remounting input components on keystrokes.
 - `src/api.ts`: same-origin fetch and downloadable exports.
 - `tests/`: real HTTP/SQLite integration tests and guidance contracts.
@@ -113,7 +115,7 @@ Version history also offers a read-only comparison of any earlier snapshot with 
 
 ### Full-library portability
 
-An authenticated user can export their entire library, including every retained revision, as `sunomat-library-v1` JSON. The archive contains an export timestamp and project groups with original names, oldest-to-latest version arrays, original version timestamps and validated song data. It excludes user IDs, emails, password hashes and sessions. A single owner-scoped SQL read obtains a consistent snapshot. An empty library exports as an empty project list.
+An authenticated user can export their entire library, including every retained revision, as `sunomat-library-v1` JSON. The archive contains an export timestamp and project groups with original names, oldest-to-latest version arrays, original version timestamps and validated song data. It excludes account records, password hashes and session data; user-authored song text is exported unchanged. A single owner-scoped SQL read obtains a consistent snapshot. An empty library exports as an empty project list.
 
 Restore validates the entire archive, previews project/version counts and available quota, then creates **new copies** in the signed-in user's account. Project and version identities are regenerated, and stable project names derive from the first version's title plus a new UUID. Existing projects are never updated or deleted. Original version order and timestamps are retained, even when several timestamps match. Every imported revision counts toward the same 100-save quota. `BEGIN IMMEDIATE`, quota preflight and the existing quota trigger make the operation atomic. Any write failure rolls back all imported projects and revisions. No database migration is required.
 
@@ -127,6 +129,8 @@ This is additive restore, not merging or synchronization. Reimporting an archive
 | GET `/api/me`                      | Current user or null, quota usage, registration state                                                           |
 | POST `/api/register`, `/api/login` | Validated credentials, new opaque session cookie                                                                |
 | POST `/api/logout`                 | Invalidate current session and expire cookie                                                                    |
+| POST `/api/account/password`       | Verify current password, update credentials and revoke other sessions; retain current session                   |
+| DELETE `/api/account`              | Verify current password and typed account email; transactionally remove only that account and expire its cookie |
 | GET `/api/projects`                | Owner's latest snapshots, counts and usage                                                                      |
 | GET `/api/projects/:uuid`          | Owner-scoped complete revision history                                                                          |
 | POST `/api/saves`                  | `{song, projectId?, baseId?}`; immutable save or 409                                                            |
@@ -138,6 +142,14 @@ This is additive restore, not merging or synchronization. Reimporting an archive
 JSON mutations require exact configured Origin plus `X-Sunomat-Request: 1`. The normal JSON body cap is 80 KB. The authenticated library-import endpoint alone allows up to 20 MiB, bounded to one import per process at a time; simultaneous attempts receive 429. Authentication occurs before reading a large archive. Both frontend and backend validate its format, count, text limits and timestamps. Bad input → 400, missing session → 401, cross-origin → 403, missing or another owner's resource → 404, full quota/conflict → 409, oversized request → 413, wrong content type → 415, throttling → 429. Error responses expose no SQL or passwords.
 
 ### Security and privacy
+
+#### Account lifecycle
+
+Authenticated users manage their account through **My account**. Password changes require the current password, a different new password of 12–128 characters and matching confirmation in the browser. The server independently validates the current/new values. It verifies the current salted hash, computes a fresh salted hash and then rechecks both the live session and unchanged credential hash inside a transaction. Only then does it update the password and revoke every other session. The current token remains active with its existing expiry; no cookie replacement or session extension is performed. Concurrent changes cannot silently overwrite one another. A revoked session cannot finish a change that was already awaiting password derivation.
+
+Deletion requires the current password plus the account's typed email; the server normalizes case and compares it to the authenticated account. IDs supplied by the client have no authority. After password verification, the transaction repeats the live-session/credential check, deletes that user and cascades their projects, saves and sessions through existing foreign keys. A write failure rolls back the full operation. The response expires the current cookie. The browser clears the account, library, dialogs, searches and current draft, and ignores older in-flight account responses. Previously downloaded backups and operator database backups are not erased; operator retention remains outside the application. This is logical removal from the active database, not a secure wipe of underlying storage.
+
+Account mutations share the existing eight-slot password-work bound and socket-IP throttle. An additional account-ID throttle permits at most 12 credential-sensitive attempts per 15-minute window across password changes and deletion. Both endpoints require the same exact-origin CSRF protections as other mutations. There is still no forgotten-password email service; signed-in password change and operator recovery are separate workflows. No schema migration or new dependency is required.
 
 Passwords use Node scrypt with random 128-bit salts and constant-time comparison; only salted hashes are stored. Sessions use random 256-bit tokens, storing only SHA-256 hashes, expire after seven days and are pruned. Login replaces that browser's session and caps active sessions per account. Production cookies are `__Host-`, Secure, HttpOnly, SameSite=Lax. Production startup requires an exact HTTPS APP_ORIGIN. CORS is not enabled; mutations compare Origin and reject cross-site Fetch Metadata. Forwarded Host/IP headers are not trusted.
 
@@ -162,4 +174,4 @@ Database migration version is stored in `PRAGMA user_version`; migration 1 is tr
 
 ## Known boundaries and future extensions
 
-No public sharing or admin dashboard; no verified-email service, self-service password reset, OAuth/SSO or MFA. This is a modest self-hosted account system; use edge controls and operator recovery. No audio storage, direct Suno integration, automated syllable analysis, full-text search index, autosave or exact output reproduction. Field recommendations can have false positives; users remain free to save. Locale is English. Per-setup and full-library portability are implemented; archive merging, duplicate detection and self-service account deletion remain future work. For high-volume/multi-host usage, migrate to a network database and shared rate limiter before adding replicas.
+No public sharing or admin dashboard; no verified-email service, forgotten-password email reset, OAuth/SSO or MFA. Signed-in password changes and self-service account deletion are implemented; lost passwords use operator recovery. This is a modest self-hosted account system; use edge controls for public deployments. No audio storage, direct Suno integration, automated syllable analysis, full-text search index, autosave or exact output reproduction. Field recommendations can have false positives; users remain free to save. Locale is English. Per-setup and full-library portability are implemented; archive merging and duplicate detection remain future work. For high-volume/multi-host usage, migrate to a network database and shared rate limiter before adding replicas.

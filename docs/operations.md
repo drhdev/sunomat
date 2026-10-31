@@ -41,6 +41,14 @@ Never run `docker compose down -v` unless you intentionally want to erase the da
 
 ## Account recovery
 
+### Signed-in account settings
+
+Users who know their current password can open **My account → Change your password**. The new password must be different and contain 12–128 characters. A successful change revokes other sessions and preserves the current token's existing expiry. Incorrect current passwords and failed writes do not change credentials or sessions. Account-sensitive attempts are limited to 12 per account per 15 minutes; the existing IP and password-work bounds also apply.
+
+The same dialog has a collapsed **Delete account** section. Deletion requires the account email and current password and removes that account's active database records, projects, saved versions and sessions in one transaction. It also clears the current browser draft. Users should export their library and unsaved draft first when they want to keep them. Downloaded backups and operator backups are not erased, and underlying database pages are not securely wiped. Operators control backup retention. Restoring an older full database backup can restore records removed after that backup was made.
+
+### Forgotten passwords
+
 There is no email reset service. An authorized server operator can reset a user's password through stdin; no password is accepted as a command-line argument. Verify the requesting person's identity outside this application first. Run interactively in a trusted terminal, or use a password manager to supply stdin:
 
 ```sh

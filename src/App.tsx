@@ -66,6 +66,7 @@ import { formatValidationError, parseSetup } from "../shared/setup";
 import { credentialsSchema } from "../shared/identity";
 import { VersionComparison } from "./components/version-comparison";
 import { LibraryTransfer } from "./components/library-transfer";
+import { AccountSettings } from "./components/account-settings";
 
 type View = "compose" | "library" | "guide";
 type Step = "sound" | "lyrics" | "controls" | "production";
@@ -225,26 +226,35 @@ export default function App() {
       void api("/logout", "POST", {})
         .then(() => {
           if (generation !== accountGeneration.current) return;
-          accountGeneration.current++;
-          libraryRequest.current++;
-          setLoading(false);
-          setBusy(false);
-          setUser(null);
-          setProjects([]);
-          setUsage(0);
-          setSong(emptySong());
-          setActive(null);
-          setBaseId(undefined);
-          setBaseline(JSON.stringify(emptySong()));
-          setHistory(null);
-          setComparison(null);
-          setDeleteTarget(null);
-          notify("Signed out. Private data cleared from this workspace.");
+          clearAccount("Signed out. Private data cleared from this workspace.");
         })
         .catch((e) => {
           if (generation === accountGeneration.current) setError(e.message);
         });
     });
+  }
+  function clearAccount(message: string) {
+    accountGeneration.current++;
+    libraryRequest.current++;
+    setAccountOpen(false);
+    setLoading(false);
+    setBusy(false);
+    setUser(null);
+    setProjects([]);
+    setUsage(0);
+    setSong(emptySong());
+    setActive(null);
+    setBaseId(undefined);
+    setBaseline(JSON.stringify(emptySong()));
+    setHistory(null);
+    setHistoryName("");
+    setComparison(null);
+    setDeleteTarget(null);
+    setPending(null);
+    setQuery("");
+    setFilter("all");
+    setError("");
+    notify(message);
   }
   function load(s: Saved, asTemplate = false, latestId?: string) {
     guard(() => {
@@ -1886,33 +1896,27 @@ export default function App() {
           </footer>
         </main>
       </div>
-      <Dialog
-        open={accountOpen && Boolean(user)}
+      <AccountSettings
+        key={user?.id || "guest"}
+        user={user}
+        usage={usage}
+        open={accountOpen}
         onOpenChange={setAccountOpen}
-        title="Your private workspace."
-        description={`${user?.email || ""} · ${usage} of 100 saved versions used.`}
-      >
-        <p className="field-hint">
-          Every saved version belongs to your account. Export important setups
-          and keep your password in a password manager.
-        </p>
-        <div className="dialog-actions">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setView("library");
-              setAccountOpen(false);
-            }}
-          >
-            <FolderOpen size={15} />
-            Open library
-          </Button>
-          <Button onClick={signOut}>
-            <LogOut size={15} />
-            Sign out
-          </Button>
-        </div>
-      </Dialog>
+        onOpenLibrary={() => {
+          setView("library");
+          setAccountOpen(false);
+        }}
+        onSignOut={signOut}
+        onPasswordChanged={() =>
+          notify("Password updated. Other sessions have been signed out.")
+        }
+        onDeleted={() => {
+          clearAccount(
+            "Account deleted. Your private library and sessions have been removed.",
+          );
+          setView("compose");
+        }}
+      />
       <Dialog
         open={auth}
         onOpenChange={setAuth}

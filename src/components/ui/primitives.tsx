@@ -62,18 +62,28 @@ export function Dialog({
   title,
   description,
   children,
+  dismissible = true,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title: string;
   description: string;
   children: React.ReactNode;
+  dismissible?: boolean;
 }) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="dialog-overlay" />
-        <DialogPrimitive.Content className="dialog-content">
+        <DialogPrimitive.Content
+          className="dialog-content"
+          onEscapeKeyDown={(event) => {
+            if (!dismissible) event.preventDefault();
+          }}
+          onPointerDownOutside={(event) => {
+            if (!dismissible) event.preventDefault();
+          }}
+        >
           <DialogPrimitive.Title className="dialog-title">
             {title}
           </DialogPrimitive.Title>
@@ -87,6 +97,7 @@ export function Dialog({
               variant="ghost"
               size="icon"
               aria-label="Close dialog"
+              disabled={!dismissible}
             >
               <X size={18} />
             </Button>

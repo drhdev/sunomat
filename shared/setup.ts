@@ -11,6 +11,10 @@ export function formatValidationError(error: z.ZodError): string {
         password: "Password",
         projectId: "Project ID",
         baseId: "Base version ID",
+        currentPassword: "Current password",
+        newPassword: "New password",
+        confirmPassword: "Confirm new password",
+        confirmationEmail: "Account email confirmation",
       };
       const label =
         typeof key === "string"
