@@ -1,0 +1,33 @@
+services:
+  sunomat:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN to your exact HTTPS domain}
+      NODE_ENV: production
+      PORT: "3000"
+      DB_PATH: /data/sunomat.db
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+    expose:
+      - "3000"
+    volumes:
+      - sunomat-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+    mem_limit: 384m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  sunomat-data:
