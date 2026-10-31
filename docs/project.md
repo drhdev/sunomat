@@ -88,11 +88,13 @@ React/TypeScript/Vite build to static assets. Node's HTTP server serves both ass
 - `shared/song.ts`: single schema, defaults, tags, original presets, deterministic advice and text handoff.
 - `shared/presentation.ts`: exhaustive English field labels, date/number formatting and pure snapshot comparison.
 - `shared/setup.ts` and `shared/identity.ts`: validated setup imports, readable validation errors and shared account credential rules.
+- `shared/library.ts`: versioned full-library archive schema, per-project/version validation and the 100-version archive bound.
 - `server/store.ts`: versioned DB migration, ownership checks, immutable saves, quota and optimistic conflict checks.
 - `server/app.ts`: HTTP routing, auth, sessions, validation, rate limits, security headers, static files.
 - `server/index.ts`: environment validation and graceful shutdown.
 - `src/components/ui/primitives.tsx`: locally owned shadcn composition and Radix dialog behavior.
 - `src/components/version-comparison.tsx`: read-only side-by-side changes between an earlier saved version and the latest snapshot.
+- `src/components/library-transfer.tsx`: private full-library download, file validation, quota preview and additive restore. Account-keyed lifetime checks ignore delayed downloads after account changes or navigation away.
 - `src/App.tsx`: composer/library/guide workflows. Render helpers are invoked as functions to avoid remounting input components on keystrokes.
 - `src/api.ts`: same-origin fetch and downloadable exports.
 - `tests/`: real HTTP/SQLite integration tests and guidance contracts.
@@ -109,21 +111,31 @@ To update a project, the client submits the latest known `baseId`. An outdated b
 
 Version history also offers a read-only comparison of any earlier snapshot with the latest saved version. The comparison lists only fields whose stored values differ, including lyrics and listening notes. Values have English labels and appropriate units; empty values and unrated results are explicit. Identical snapshots have an empty-state explanation. The comparison is computed from already owner-scoped history in the browser: no additional database writes, API endpoints, migrations or quota usage are introduced. On mobile, the earlier/latest values stack vertically.
 
+### Full-library portability
+
+An authenticated user can export their entire library, including every retained revision, as `sunomat-library-v1` JSON. The archive contains an export timestamp and project groups with original names, oldest-to-latest version arrays, original version timestamps and validated song data. It excludes user IDs, emails, password hashes and sessions. A single owner-scoped SQL read obtains a consistent snapshot. An empty library exports as an empty project list.
+
+Restore validates the entire archive, previews project/version counts and available quota, then creates **new copies** in the signed-in user's account. Project and version identities are regenerated, and stable project names derive from the first version's title plus a new UUID. Existing projects are never updated or deleted. Original version order and timestamps are retained, even when several timestamps match. Every imported revision counts toward the same 100-save quota. `BEGIN IMMEDIATE`, quota preflight and the existing quota trigger make the operation atomic. Any write failure rolls back all imported projects and revisions. No database migration is required.
+
+This is additive restore, not merging or synchronization. Reimporting an archive creates additional copies and consumes additional slots; the preview states this before confirmation. If a network failure leaves the response uncertain, users should inspect their library before retrying. An archive may contain at most 100 projects and 100 total versions. Empty archives are readable but cannot be restored. Composer setup files and full-library files have separate formats, validators and import controls with explicit routing guidance.
+
 ### API
 
-| Method/path                        | Contract                                               |
-| ---------------------------------- | ------------------------------------------------------ |
-| GET `/api/health`                  | Lightweight SQLite read check, no account data         |
-| GET `/api/me`                      | Current user or null, quota usage, registration state  |
-| POST `/api/register`, `/api/login` | Validated credentials, new opaque session cookie       |
-| POST `/api/logout`                 | Invalidate current session and expire cookie           |
-| GET `/api/projects`                | Owner's latest snapshots, counts and usage             |
-| GET `/api/projects/:uuid`          | Owner-scoped complete revision history                 |
-| POST `/api/saves`                  | `{song, projectId?, baseId?}`; immutable save or 409   |
-| DELETE `/api/projects/:uuid`       | Delete owner-scoped project and all revisions          |
-| DELETE `/api/saves/:uuid`          | Delete one owner-scoped revision; remove empty project |
+| Method/path                        | Contract                                                                                                        |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| GET `/api/health`                  | Lightweight SQLite read check, no account data                                                                  |
+| GET `/api/me`                      | Current user or null, quota usage, registration state                                                           |
+| POST `/api/register`, `/api/login` | Validated credentials, new opaque session cookie                                                                |
+| POST `/api/logout`                 | Invalidate current session and expire cookie                                                                    |
+| GET `/api/projects`                | Owner's latest snapshots, counts and usage                                                                      |
+| GET `/api/projects/:uuid`          | Owner-scoped complete revision history                                                                          |
+| POST `/api/saves`                  | `{song, projectId?, baseId?}`; immutable save or 409                                                            |
+| DELETE `/api/projects/:uuid`       | Delete owner-scoped project and all revisions                                                                   |
+| DELETE `/api/saves/:uuid`          | Delete one owner-scoped revision; remove empty project                                                          |
+| GET `/api/library/export`          | Export only the signed-in user's complete project history as `sunomat-library-v1`                               |
+| POST `/api/library/import`         | Validate a library archive and restore new copies in one transaction; 201 with project/version counts and usage |
 
-JSON mutations require exact configured Origin plus `X-Sunomat-Request: 1`. JSON body cap is 80 KB; both frontend import and backend schema validate. Bad input → 400, missing session → 401, cross-origin → 403, missing or another owner's resource → 404, full quota/conflict → 409, wrong content type → 415, throttling → 429. Error responses expose no SQL or passwords.
+JSON mutations require exact configured Origin plus `X-Sunomat-Request: 1`. The normal JSON body cap is 80 KB. The authenticated library-import endpoint alone allows up to 20 MiB, bounded to one import per process at a time; simultaneous attempts receive 429. Authentication occurs before reading a large archive. Both frontend and backend validate its format, count, text limits and timestamps. Bad input → 400, missing session → 401, cross-origin → 403, missing or another owner's resource → 404, full quota/conflict → 409, oversized request → 413, wrong content type → 415, throttling → 429. Error responses expose no SQL or passwords.
 
 ### Security and privacy
 
@@ -150,4 +162,4 @@ Database migration version is stored in `PRAGMA user_version`; migration 1 is tr
 
 ## Known boundaries and future extensions
 
-No public sharing or admin dashboard; no verified-email service, self-service password reset, OAuth/SSO or MFA. This is a modest self-hosted account system; use edge controls and operator recovery. No audio storage, direct Suno integration, automated syllable analysis, full-text search index, autosave or exact output reproduction. Field recommendations can have false positives; users remain free to save. Locale is English. Import/export is per setup; bulk user-library export and account deletion are future work. For high-volume/multi-host usage, migrate to a network database and shared rate limiter before adding replicas.
+No public sharing or admin dashboard; no verified-email service, self-service password reset, OAuth/SSO or MFA. This is a modest self-hosted account system; use edge controls and operator recovery. No audio storage, direct Suno integration, automated syllable analysis, full-text search index, autosave or exact output reproduction. Field recommendations can have false positives; users remain free to save. Locale is English. Per-setup and full-library portability are implemented; archive merging, duplicate detection and self-service account deletion remain future work. For high-volume/multi-host usage, migrate to a network database and shared rate limiter before adding replicas.

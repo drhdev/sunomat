@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { songSchema, type Song } from "../shared/song.js";
+import { libraryVersionCount, type LibraryArchive } from "../shared/library.js";
 
 export class ApiError extends Error {
   constructor(
@@ -33,6 +34,17 @@ const serialize = (r: Row): Saved => ({
   song: songSchema.parse(JSON.parse(r.content)),
   createdAt: r.created_at,
 });
+function projectName(title: string, id: string): string {
+  const slug =
+    (title || "untitled-idea")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || "song";
+  return `${slug}-${id}`;
+}
 
 export function createStore(path: string) {
   if (path !== ":memory:")
@@ -76,6 +88,80 @@ export function createStore(path: string) {
   return {
     db,
     usage,
+    exportLibrary(userId: string): LibraryArchive {
+      // A single SELECT provides a consistent owner-scoped read snapshot.
+      const rows = db
+        .prepare(
+          `SELECT p.id AS project_id,p.name,s.content,s.created_at FROM projects p JOIN saves s ON s.project_id=p.id WHERE p.user_id=? AND s.user_id=? ORDER BY p.rowid,s.rowid`,
+        )
+        .all(userId, userId) as unknown as Omit<Row, "id">[];
+      const groups = new Map<string, LibraryArchive["projects"][number]>();
+      for (const row of rows) {
+        let group = groups.get(row.project_id);
+        if (!group) {
+          group = { name: row.name, versions: [] };
+          groups.set(row.project_id, group);
+        }
+        group.versions.push({
+          createdAt: row.created_at,
+          song: songSchema.parse(JSON.parse(row.content)),
+        });
+      }
+      return {
+        format: "sunomat-library-v1",
+        exportedAt: new Date().toISOString(),
+        projects: [...groups.values()],
+      };
+    },
+    importLibrary(userId: string, archive: LibraryArchive) {
+      const needed = libraryVersionCount(archive);
+      if (!needed)
+        throw new ApiError(
+          400,
+          "This backup is empty. There are no saved versions to import.",
+        );
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const remaining = 100 - usage(userId);
+        if (needed > remaining)
+          throw new ApiError(
+            409,
+            `This backup needs ${needed} save slots, but only ${remaining} are available. No projects were imported.`,
+          );
+        const insertProject = db.prepare(
+          "INSERT INTO projects(id,user_id,name) VALUES(?,?,?)",
+        );
+        const insertSave = db.prepare(
+          "INSERT INTO saves(id,project_id,user_id,content,created_at) VALUES(?,?,?,?,?)",
+        );
+        for (const project of archive.projects) {
+          const id = randomUUID();
+          insertProject.run(
+            id,
+            userId,
+            projectName(project.versions[0].song.title, id),
+          );
+          for (const version of project.versions)
+            insertSave.run(
+              randomUUID(),
+              id,
+              userId,
+              JSON.stringify(version.song),
+              version.createdAt,
+            );
+        }
+        const result = {
+          projects: archive.projects.length,
+          versions: needed,
+          usage: usage(userId),
+        };
+        db.exec("COMMIT");
+        return result;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
     list(userId: string) {
       const rows = db
         .prepare(
@@ -125,15 +211,7 @@ export function createStore(path: string) {
           ).name;
         } else {
           projectId = randomUUID();
-          const slug =
-            (song.title || "untitled-idea")
-              .normalize("NFKD")
-              .replace(/[\u0300-\u036f]/g, "")
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-|-$/g, "")
-              .slice(0, 60) || "song";
-          name = `${slug}-${projectId}`;
+          name = projectName(song.title, projectId);
           db.prepare("INSERT INTO projects(id,user_id,name) VALUES(?,?,?)").run(
             projectId,
             userId,

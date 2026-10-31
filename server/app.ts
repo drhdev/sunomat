@@ -18,6 +18,11 @@ import { songSchema } from "../shared/song.js";
 import { ApiError, createStore } from "./store.js";
 import { credentialsSchema } from "../shared/identity.js";
 import { formatValidationError } from "../shared/setup.js";
+import {
+  librarySchema,
+  libraryValidationMessage,
+  MAX_LIBRARY_BYTES,
+} from "../shared/library.js";
 
 const scrypt = promisify(scryptCallback);
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -40,6 +45,7 @@ export function createApp(config: Config) {
   const store = createStore(config.dbPath);
   const attempts = new Map<string, { count: number; until: number }>();
   const authPending = { count: 0 };
+  let importingLibrary = false;
   const clientDir = resolve(config.clientDir || "dist/client");
   const secure = config.secureCookies ?? false;
   const cookieName = secure ? "__Host-sunomat" : "sunomat";
@@ -57,14 +63,14 @@ export function createApp(config: Config) {
     });
     res.end(JSON.stringify(data));
   }
-  async function body(req: IncomingMessage) {
+  async function body(req: IncomingMessage, maximumBytes = 80_000) {
     if (!req.headers["content-type"]?.startsWith("application/json"))
       throw new ApiError(415, "Send JSON content");
     let size = 0;
     const chunks: Buffer[] = [];
     for await (const c of req) {
       size += c.length;
-      if (size > 80_000) throw new ApiError(413, "Request is too large");
+      if (size > maximumBytes) throw new ApiError(413, "Request is too large");
       chunks.push(c);
     }
     try {
@@ -259,6 +265,30 @@ export function createApp(config: Config) {
           return;
         }
         const user = requireUser(req);
+        if (path === "/api/library/export" && method === "GET") {
+          json(res, 200, store.exportLibrary(user.id));
+          return;
+        }
+        if (path === "/api/library/import" && method === "POST") {
+          // Bound large-body work to one import per process; ordinary saves stay small.
+          if (importingLibrary)
+            throw new ApiError(
+              429,
+              "A library import is already in progress. Try again shortly.",
+            );
+          importingLibrary = true;
+          try {
+            const parsed = librarySchema.safeParse(
+              await body(req, MAX_LIBRARY_BYTES),
+            );
+            if (!parsed.success)
+              throw new ApiError(400, libraryValidationMessage(parsed.error));
+            json(res, 201, store.importLibrary(user.id, parsed.data));
+          } finally {
+            importingLibrary = false;
+          }
+          return;
+        }
         if (path === "/api/projects" && method === "GET") {
           json(res, 200, {
             projects: store.list(user.id),

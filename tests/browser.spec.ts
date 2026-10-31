@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-for (const operation of ["library", "history", "save"] as const) {
+for (const operation of ["library", "history", "save", "export"] as const) {
   test(`late ${operation} responses cannot repopulate a different user's workspace`, async ({
     page,
   }) => {
@@ -22,7 +22,9 @@ for (const operation of ["library", "history", "save"] as const) {
     await save(page);
     const project = (await (await page.request.get("/api/projects")).json())
       .projects[0];
-    if (operation === "history") {
+    const downloads: string[] = [];
+    page.on("download", (file) => downloads.push(file.suggestedFilename()));
+    if (operation === "history" || operation === "export") {
       await page.getByRole("button", { name: /^My library/ }).click();
       await expect(
         page.getByRole("heading", {
@@ -38,9 +40,11 @@ for (const operation of ["library", "history", "save"] as const) {
     const heldPath =
       operation === "save"
         ? "/api/saves"
-        : operation === "history"
-          ? `/api/projects/${project.projectId}`
-          : "/api/projects";
+        : operation === "export"
+          ? "/api/library/export"
+          : operation === "history"
+            ? `/api/projects/${project.projectId}`
+            : "/api/projects";
 
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -69,6 +73,10 @@ for (const operation of ["library", "history", "save"] as const) {
         .getByRole("button", {
           name: "Version history for Owner A private song",
         })
+        .click();
+    else if (operation === "export")
+      await page
+        .getByRole("button", { name: "Export library", exact: true })
         .click();
     else await page.getByRole("button", { name: /^My library/ }).click();
     await ready;
@@ -107,8 +115,13 @@ for (const operation of ["library", "history", "save"] as const) {
       if (!r.url().endsWith(heldPath)) return false;
       const data = await r.json();
       return (
-        (data.saved || data.versions?.[0] || data.projects?.[0])?.song.title ===
-        "Owner A private song"
+        (
+          data.saved ||
+          data.versions?.[0] ||
+          (operation === "export"
+            ? data.projects?.[0]?.versions?.[0]
+            : data.projects?.[0])
+        )?.song.title === "Owner A private song"
       );
     });
     release();
@@ -120,6 +133,7 @@ for (const operation of ["library", "history", "save"] as const) {
         ),
     );
     await expect(page.locator(".project-card")).toHaveCount(0);
+    expect(downloads).toEqual([]);
     await expect(
       page.getByRole("heading", { name: "The first song is yours to make." }),
     ).toBeVisible();

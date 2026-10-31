@@ -65,6 +65,7 @@ import {
 import { formatValidationError, parseSetup } from "../shared/setup";
 import { credentialsSchema } from "../shared/identity";
 import { VersionComparison } from "./components/version-comparison";
+import { LibraryTransfer } from "./components/library-transfer";
 
 type View = "compose" | "library" | "guide";
 type Step = "sound" | "lyrics" | "controls" | "production";
@@ -1694,6 +1695,15 @@ export default function App() {
                 </Card>
               ) : (
                 <>
+                  <LibraryTransfer
+                    key={user.id}
+                    usage={usage}
+                    onNotice={notify}
+                    onImported={(result) => {
+                      setUsage(result.usage);
+                      void refreshLibrary();
+                    }}
+                  />
                   <div className="library-toolbar">
                     <div className="search-box">
                       <Search size={16} />

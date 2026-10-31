@@ -36,6 +36,10 @@ export function parseSetup(text: string): Song {
     "format" in data &&
     data.format !== "sunomat-v1"
   ) {
+    if (data.format === "sunomat-library-v1")
+      throw new Error(
+        "This is a full library backup. Open My library and choose Import library backup to restore it.",
+      );
     throw new Error(
       "This setup format is not supported. Export a Sunomat v1 setup and try again.",
     );

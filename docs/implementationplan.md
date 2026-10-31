@@ -18,6 +18,12 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - [x] 11. Account request consistency: ignore delayed responses after sign-out, account changes or a newer refresh, keeping each user's workspace private.
 - [x] 12. Verify follow-up: API/presentation tests, non-English-browser regression coverage, version-comparison and delayed-account-response browser workflows, production build and push to main.
 
+## Library portability chunks
+
+- [x] 13. Private library export: include every project and immutable version in a validated, versioned JSON archive; exclude account credentials and session data.
+- [x] 14. Additive library restore: preview contents, preserve history order and timestamps, generate new identities, enforce quota atomically and never overwrite existing projects.
+- [ ] 15. Verification and delivery: test archive validation, account isolation, round-trip fidelity, quota/rollback, browser download/import and account switching; document and push to main.
+
 ## Verification record
 
 - 2026-10-31: repository inspected (initial LICENSE only). Research retrieved from Sonoya, Suno help and comparable builders. Implementation started.
@@ -32,6 +38,8 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - 2026-10-31 follow-up: scoped asynchronous library/history/save/delete/account-status results to the current account. Three browser cases hold an earlier user's library, history and save responses until after another account signs in and confirm the private workspace remains empty for the new account.
 - 2026-10-31 follow-up checks: `npm test` passed 10 tests; production build/typecheck passed; Chromium passed 7 workflows, including a `de-DE` browser with English counters, account validation, dates and connection errors, plus mobile version comparison. Browser JS remains approximately 139 KB gzip; no database migration or additional runtime service is required. Implementation commit `613f93d` was successfully pushed to `main`; follow-up chunks 9–12 are complete.
 - Actual Coolify deployment/domain TLS cannot be verified without access to the user's Coolify server; deployment is an operator step, not an unfinished code chunk.
+- 2026-10-31 library portability: implemented owner-only full-history JSON export and additive transactional restore, with a mobile preview, account-switch-safe downloads, new identities, preserved timestamps/order and the same 100-version quota. Archives contain no account records or sessions. Existing projects are never changed; repeated imports intentionally create additional copies and the preview explains this.
+- 2026-10-31 library checks: `npm test` passed 14 tests, including authenticated export isolation, exact version/template round trips, archives above the ordinary 80 KB request cap, malformed/empty archives, quota rejection, rollback after a simulated second-project write failure and release of the single-import slot after validation failure. Production build/typecheck passed. Chromium passed 9 workflows including complete library download and restore at 375px, duplicate-copy warnings, client quota guards and suppression of a delayed export after switching accounts. Browser JS is approximately 141 KB gzip. No dependencies, services or migrations were added. Chunk 15 awaits only GitHub synchronization.
 
 ## Follow-up procedure
 

@@ -22,6 +22,16 @@ The script refuses to overwrite an existing file. Copy it to a secure location u
 
 ## Restore
 
+### User-level library backup and restore
+
+Users can choose **My library → Export library** for a portable JSON backup of their own projects and every saved version. This is separate from the database backup above: it does not contain credentials, sessions or other accounts. Store exported files privately because they contain lyrics, notes and reference descriptions.
+
+To restore, sign in, open **My library → Import library backup**, choose the JSON file and review the preview. Each imported version counts toward the account's 100-version limit. The operation creates new project/version identities and new copies; it never replaces existing data. Reimporting the same backup creates additional copies. If a connection fails during import, check the library before retrying. Invalid archives, insufficient quota and write failures leave no partial import. Original version timestamps and order are retained. This feature is suitable for moving settings between accounts or instances, not restoring account authentication or synchronizing libraries.
+
+Archives are limited to 100 total versions and 20 MiB. Ensure any reverse-proxy body limit allows the required backup size for `/api/library/import`; other application endpoints retain their 80 KB body cap. Only one import per Node process is accepted at a time to bound resource usage. There are no new services, dependencies or schema migrations.
+
+### Full database restore
+
 1. Stop the service and take a final backup of the old volume if possible.
 2. Restore the backup database into the volume at `/data/sunomat.db`, owned by UID/GID 1000. Remove stale `sunomat.db-wal` and `sunomat.db-shm` **only while the service is stopped**, after preserving the old database files together.
 3. Start the service. Check `/api/health`, sign in, inspect a song and its history.
