@@ -13,18 +13,37 @@ export async function api<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    method,
-    credentials: "same-origin",
-    headers:
-      method === "GET"
-        ? {}
-        : { "Content-Type": "application/json", "X-Sunomat-Request": "1" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Request failed");
-  return data;
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, {
+      method,
+      credentials: "same-origin",
+      headers:
+        method === "GET"
+          ? {}
+          : { "Content-Type": "application/json", "X-Sunomat-Request": "1" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new Error(
+      "Cannot reach Sunomat. Check your connection and try again.",
+    );
+  }
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("The server returned an unexpected response. Try again.");
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data))
+    throw new Error("The server returned an unexpected response. Try again.");
+  if (!response.ok)
+    throw new Error(
+      "error" in data && typeof data.error === "string"
+        ? data.error
+        : "Request failed. Try again.",
+    );
+  return data as T;
 }
 export function download(name: string, text: string, type = "text/plain") {
   const url = URL.createObjectURL(new Blob([text], { type }));

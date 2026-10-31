@@ -12,6 +12,7 @@ import {
   Copy,
   FileText,
   FolderOpen,
+  GitCompareArrows,
   History,
   Info,
   Layers3,
@@ -50,13 +51,20 @@ import {
   handoff,
   presets,
   sectionTags,
-  songSchema,
   sources,
   tagGroups,
   type Advice,
   type Song,
 } from "../shared/song";
 import { api, download, type Saved, type User } from "./api";
+import {
+  fieldLabels,
+  formatNumber,
+  formatSavedDate as date,
+} from "../shared/presentation";
+import { formatValidationError, parseSetup } from "../shared/setup";
+import { credentialsSchema } from "../shared/identity";
+import { VersionComparison } from "./components/version-comparison";
 
 type View = "compose" | "library" | "guide";
 type Step = "sound" | "lyrics" | "controls" | "production";
@@ -91,20 +99,6 @@ const stepList: {
     detail: "Learn from every take",
   },
 ];
-const date = (value: string) =>
-  new Date(value).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-const titles: Record<string, string> = {
-  style: "Style of music",
-  lyrics: "Lyrics",
-  exclude: "Exclude styles",
-  title: "Song title",
-  prompt: "Simple prompt",
-  changeNote: "Change for this take",
-  referenceNotes: "Reference notes",
-};
 
 export default function App() {
   const [song, setSong] = useState<Song>(emptySong);
@@ -135,6 +129,10 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [history, setHistory] = useState<Saved[] | null>(null);
   const [historyName, setHistoryName] = useState("");
+  const [comparison, setComparison] = useState<{
+    before: Saved;
+    after: Saved;
+  } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     type: "project" | "version";
@@ -144,6 +142,8 @@ export default function App() {
   const [adviceField, setAdviceField] = useState<string>("all");
   const lyricsRef = useRef<HTMLTextAreaElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const libraryRequest = useRef(0);
+  const accountGeneration = useRef(0);
   const notificationTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -161,13 +161,18 @@ export default function App() {
     notificationTimer.current = setTimeout(() => setToast(""), 4500);
   };
   useEffect(() => {
+    const generation = accountGeneration.current;
     api<{ user: User | null; usage: number; registration: boolean }>("/me")
       .then((data) => {
+        if (generation !== accountGeneration.current) return;
         setUser(data.user);
         setUsage(data.usage);
         setRegistration(data.registration);
       })
-      .catch((e) => setError(`Cannot connect to the server: ${e.message}`))
+      .catch((e) => {
+        if (generation === accountGeneration.current)
+          setError(`Cannot connect to the server: ${e.message}`);
+      })
       .finally(() => setReady(true));
     return () => {
       clearTimeout(notificationTimer.current);
@@ -191,15 +196,18 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", before);
   }, [dirty]);
   async function refreshLibrary() {
+    if (!user) return;
+    const request = ++libraryRequest.current;
     setLoading(true);
     try {
       const data = await api<{ projects: Saved[]; usage: number }>("/projects");
+      if (request !== libraryRequest.current) return;
       setProjects(data.projects);
       setUsage(data.usage);
     } catch (e) {
-      setError((e as Error).message);
+      if (request === libraryRequest.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (request === libraryRequest.current) setLoading(false);
     }
   }
   useEffect(() => {
@@ -212,8 +220,14 @@ export default function App() {
   function signOut() {
     setAccountOpen(false);
     guard(() => {
+      const generation = accountGeneration.current;
       void api("/logout", "POST", {})
         .then(() => {
+          if (generation !== accountGeneration.current) return;
+          accountGeneration.current++;
+          libraryRequest.current++;
+          setLoading(false);
+          setBusy(false);
           setUser(null);
           setProjects([]);
           setUsage(0);
@@ -222,9 +236,13 @@ export default function App() {
           setBaseId(undefined);
           setBaseline(JSON.stringify(emptySong()));
           setHistory(null);
+          setComparison(null);
+          setDeleteTarget(null);
           notify("Signed out. Private data cleared from this workspace.");
         })
-        .catch((e) => setError(e.message));
+        .catch((e) => {
+          if (generation === accountGeneration.current) setError(e.message);
+        });
     });
   }
   function load(s: Saved, asTemplate = false, latestId?: string) {
@@ -273,6 +291,7 @@ export default function App() {
       setAuth(true);
       return;
     }
+    const generation = accountGeneration.current;
     setBusy(true);
     setError("");
     try {
@@ -281,15 +300,17 @@ export default function App() {
         "POST",
         { song, projectId: active?.projectId, baseId },
       );
+      if (generation !== accountGeneration.current) return;
       setActive(result.saved);
       setBaseId(result.saved.id);
       setBaseline(JSON.stringify(song));
       setUsage(result.usage);
       notify("New version saved to your private library.");
     } catch (e) {
-      setError((e as Error).message);
+      if (generation === accountGeneration.current)
+        setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (generation === accountGeneration.current) setBusy(false);
     }
   }
   async function copy(label: string, value: string) {
@@ -348,27 +369,31 @@ export default function App() {
     });
   }
   async function showHistory(project: Saved) {
+    const request = ++libraryRequest.current;
     setLoading(true);
     try {
       const data = await api<{ versions: Saved[] }>(
         `/projects/${project.projectId}`,
       );
+      if (request !== libraryRequest.current) return;
       setHistory(data.versions);
       setHistoryName(project.song.title || "Untitled idea");
     } catch (e) {
-      setError((e as Error).message);
+      if (request === libraryRequest.current) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (request === libraryRequest.current) setLoading(false);
     }
   }
   async function remove() {
     if (!deleteTarget) return;
+    const generation = accountGeneration.current;
     setBusy(true);
     try {
       const r = await api<{ usage: number }>(
         `/${deleteTarget.type === "project" ? "projects" : "saves"}/${deleteTarget.id}`,
         "DELETE",
       );
+      if (generation !== accountGeneration.current) return;
       setUsage(r.usage);
       if (
         active &&
@@ -385,17 +410,25 @@ export default function App() {
       void refreshLibrary();
       notify("Deleted. Storage space is available again.");
     } catch (e) {
-      setError((e as Error).message);
+      if (generation === accountGeneration.current)
+        setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (generation === accountGeneration.current) setBusy(false);
     }
   }
   async function importFile(file?: File) {
     if (!file) return;
     try {
       if (file.size > 80_000) throw new Error("Import file is too large.");
-      const data = JSON.parse(await file.text());
-      const parsed = songSchema.parse(data.song ?? data);
+      let text: string;
+      try {
+        text = await file.text();
+      } catch {
+        throw new Error(
+          "This file could not be read. Choose a local JSON setup and try again.",
+        );
+      }
+      const parsed = parseSetup(text);
       guard(() => {
         setSong(parsed);
         setActive(null);
@@ -440,7 +473,8 @@ export default function App() {
                   count >= (max || Infinity) * 0.9 && "counter-warning",
                 )}
               >
-                {count.toLocaleString()} / {max?.toLocaleString()}
+                {formatNumber(count)} /{" "}
+                {max === undefined ? "" : formatNumber(max)}
               </span>
             )}
             {copyValue !== undefined && copyButton(label, copyValue)}
@@ -1538,7 +1572,7 @@ export default function App() {
                         <option value="all">All fields</option>
                         {[...new Set(advice.map((a) => a.field))].map((f) => (
                           <option key={f} value={f}>
-                            {titles[f] || f}
+                            {fieldLabels[f]}
                           </option>
                         ))}
                       </select>
@@ -1884,9 +1918,21 @@ export default function App() {
           registration={registration}
           onMode={setAuthMode}
           onSuccess={(u) => {
+            const generation = ++accountGeneration.current;
+            libraryRequest.current++;
+            setProjects([]);
+            setLoading(false);
+            setBusy(false);
             setUser(u);
             setAuth(false);
-            void api<{ usage: number }>("/me").then((r) => setUsage(r.usage));
+            void api<{ usage: number }>("/me")
+              .then((r) => {
+                if (generation === accountGeneration.current) setUsage(r.usage);
+              })
+              .catch((e) => {
+                if (generation === accountGeneration.current)
+                  setError(e.message);
+              });
             notify("Signed in. Your current draft is ready to save.");
           }}
         />
@@ -1974,6 +2020,18 @@ export default function App() {
                 </small>
               </div>
               <div className="history-actions">
+                {i > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Compare with latest version"
+                    onClick={() =>
+                      setComparison({ before: s, after: history[0] })
+                    }
+                  >
+                    <GitCompareArrows size={16} />
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -2008,6 +2066,10 @@ export default function App() {
           ))}
         </div>
       </Dialog>
+      <VersionComparison
+        versions={comparison}
+        onClose={() => setComparison(null)}
+      />
       <Dialog
         open={handoffOpen}
         onOpenChange={setHandoffOpen}
@@ -2086,7 +2148,7 @@ function AdviceItem({ advice: a, number }: { advice: Advice; number: number }) {
         <h4>{a.title}</h4>
         <p>{a.detail}</p>
         <a href={sources[a.source]} target="_blank" rel="noreferrer">
-          {titles[a.field] || a.field} ·{" "}
+          {fieldLabels[a.field]} ·{" "}
           {a.source === "sonoya"
             ? "Guide recommendation"
             : "Suno documentation"}
@@ -2115,14 +2177,23 @@ function AuthForm({
   return (
     <form
       className="auth-form"
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
+        const credentials = credentialsSchema.safeParse({
+          email: email.trim(),
+          password,
+        });
+        if (!credentials.success) {
+          setError(formatValidationError(credentials.error));
+          return;
+        }
         setBusy(true);
         setError("");
         void api<{ user: User }>(
           mode === "login" ? "/login" : "/register",
           "POST",
-          { email: email.trim(), password },
+          credentials.data,
         )
           .then((r) => onSuccess(r.user))
           .catch((e) => setError(e.message))

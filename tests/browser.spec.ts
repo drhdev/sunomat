@@ -1,5 +1,139 @@
 import { test, expect, type Page } from "@playwright/test";
 
+for (const operation of ["library", "history", "save"] as const) {
+  test(`late ${operation} responses cannot repopulate a different user's workspace`, async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/register", {
+      headers: { Origin: "http://127.0.0.1:4173", "X-Sunomat-Request": "1" },
+      data: {
+        email: `owner-a-${Date.now()}@example.test`,
+        password: "test-passphrase-long-enough",
+      },
+    });
+    expect(response.status()).toBe(200);
+    await page.goto("/");
+    await expect(
+      page.getByRole("button", { name: "My account", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByLabel("Song title", { exact: true })
+      .fill("Owner A private song");
+    await save(page);
+    const project = (await (await page.request.get("/api/projects")).json())
+      .projects[0];
+    if (operation === "history") {
+      await page.getByRole("button", { name: /^My library/ }).click();
+      await expect(
+        page.getByRole("heading", {
+          name: "Owner A private song",
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
+    if (operation === "save")
+      await page
+        .getByLabel("Style of music", { exact: true })
+        .fill("ambient, 72 BPM");
+    const heldPath =
+      operation === "save"
+        ? "/api/saves"
+        : operation === "history"
+          ? `/api/projects/${project.projectId}`
+          : "/api/projects";
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requestReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      requestReady = resolve;
+    });
+    await page.route(
+      `**${heldPath}`,
+      async (route) => {
+        const result = await route.fetch();
+        requestReady();
+        await gate;
+        await route.fulfill({ response: result });
+      },
+      { times: 1 },
+    );
+    if (operation === "save")
+      await page
+        .getByRole("button", { name: "Save version", exact: true })
+        .click();
+    else if (operation === "history")
+      await page
+        .getByRole("button", {
+          name: "Version history for Owner A private song",
+        })
+        .click();
+    else await page.getByRole("button", { name: /^My library/ }).click();
+    await ready;
+    await page.getByRole("button", { name: "My account", exact: true }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Sign out", exact: true })
+      .click();
+    if (operation === "save")
+      await page
+        .getByRole("button", { name: "Discard changes", exact: true })
+        .click();
+    await expect(
+      page.getByRole("button", { name: "Sign in", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page
+      .getByRole("button", { name: "New here? Create an account" })
+      .click();
+    await page
+      .getByLabel("Email", { exact: true })
+      .fill(`owner-b-${Date.now()}@example.test`);
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill("test-passphrase-long-enough");
+    await page
+      .getByRole("button", { name: "Create account", exact: true })
+      .click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await page.getByRole("button", { name: /^My library/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "The first song is yours to make." }),
+    ).toBeVisible();
+
+    const lateResponse = page.waitForResponse(async (r) => {
+      if (!r.url().endsWith(heldPath)) return false;
+      const data = await r.json();
+      return (
+        (data.saved || data.versions?.[0] || data.projects?.[0])?.song.title ===
+        "Owner A private song"
+      );
+    });
+    release();
+    await (await lateResponse).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.locator(".project-card")).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "The first song is yours to make." }),
+    ).toBeVisible();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await page.getByRole("button", { name: "Composer", exact: true }).click();
+    await expect(
+      page.getByText("Owner A private song", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Song title", { exact: true })).toHaveValue(
+      "",
+    );
+  });
+}
+
 async function save(page: Page) {
   await Promise.all([
     page.waitForResponse(
@@ -58,6 +192,30 @@ test("private projects, immutable history, template reuse, deletion and logout",
     .getByRole("button", { name: "Version history for Midnight windows" })
     .click();
   await expect(page.locator(".history-list article")).toHaveCount(2);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page
+    .locator(".history-list article")
+    .last()
+    .getByRole("button", { name: "Compare with latest version" })
+    .click();
+  const comparison = page.getByRole("dialog", {
+    name: "Compare saved versions",
+  });
+  await expect(
+    comparison.getByRole("article", { name: "Lyrics comparison" }),
+  ).toContainText("Not set");
+  await expect(
+    comparison.getByRole("article", { name: "Lyrics comparison" }),
+  ).toContainText("A silver thread across the night");
+  await expect(comparison).toContainText("1 field changed");
+  expect((await (await page.request.get("/api/me")).json()).usage).toBe(2);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await comparison.getByRole("button", { name: "Close dialog" }).click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page
     .locator(".history-list article")
     .last()
@@ -101,6 +259,58 @@ test("private projects, immutable history, template reuse, deletion and logout",
   ).toBeVisible();
   await expect(page.locator(".project-card")).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test.describe("English interface with a non-English browser", () => {
+  test.use({ locale: "de-DE", timezoneId: "UTC" });
+  test("English counters, account validation, dates and network errors", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.getByText("0 / 1,000", { exact: true })).toBeVisible();
+    await page
+      .getByLabel("Song title", { exact: true })
+      .fill("English workspace");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    const auth = page.getByRole("dialog");
+    await page.getByLabel("Email", { exact: true }).fill("invalid-email");
+    await page.getByLabel("Password", { exact: true }).fill("short");
+    await auth.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(auth.getByRole("alert")).toContainText(
+      "Email: Enter a valid email address",
+    );
+    await expect(auth.getByRole("alert")).toContainText(
+      "Password: Use at least 12 characters",
+    );
+    await page
+      .getByRole("button", { name: "New here? Create an account" })
+      .click();
+    await page
+      .getByLabel("Email", { exact: true })
+      .fill(`english-${Date.now()}@example.test`);
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill("test-passphrase-long-enough");
+    await auth
+      .getByRole("button", { name: "Create account", exact: true })
+      .click();
+    await expect(auth).not.toBeVisible();
+    await save(page);
+    await page.getByRole("button", { name: /^My library/ }).click();
+    const data = await (await page.request.get("/api/projects")).json();
+    const expectedDate = new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(data.projects[0].createdAt));
+    await expect(page.locator(".project-date")).toHaveText(expectedDate);
+    await page.route("**/api/projects", (route) => route.abort());
+    await page.getByRole("button", { name: "Refresh library" }).click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Cannot reach Sunomat. Check your connection and try again.",
+    );
+  });
 });
 
 test("mobile dark mode, audio controls, tempo merge and unsaved draft guard", async ({

@@ -95,7 +95,7 @@ test("identity, private ownership, immutable revisions, quota, conflicts and del
   );
   const song = {
     ...emptySong(),
-    title: "Über the Moon",
+    title: "Moonlight caf\u00e9",
     style: "indie folk, 92 BPM, felt piano",
     notes: "Private words",
   };
@@ -103,7 +103,7 @@ test("identity, private ownership, immutable revisions, quota, conflicts and del
   assert.equal(first.status, 201);
   assert.equal(first.data.usage, 1);
   const saved = first.data.saved as Saved;
-  assert.match(saved.name, /^uber-the-moon-[a-f0-9-]+$/);
+  assert.match(saved.name, /^moonlight-cafe-[a-f0-9-]+$/);
   assert.equal(
     (await request(`/projects/${saved.projectId}`, "GET", undefined, b.cookie))
       .status,

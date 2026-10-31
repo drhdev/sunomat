@@ -12,7 +12,7 @@ Sunomat is independent of Suno. It does not generate songs, authenticate with Su
 
 ### Primary workflow guide
 
-[Sonoya: Suno v6 Anleitung](https://sonoya.com/suno-v6-anleitung-eigene-songs-mit-ki-erstellen/) was retrieved directly as HTTP 200 on 2026-10-31 after the search tool could not open it. Recommendations are paraphrased and original examples are used; no article or lyric examples are reproduced.
+[Sonoya: Suno v6 guide (original article in German)](https://sonoya.com/suno-v6-anleitung-eigene-songs-mit-ki-erstellen/) was retrieved directly as HTTP 200 on 2026-10-31 after the search tool could not open it. Recommendations are paraphrased and original examples are used; no article or lyric examples are reproduced.
 
 The guidance engine uses concise sound descriptions, positive wanted elements in Style and unwanted elements in Exclude, square-bracket section cues, short lyric lines, and one-variable iteration. Those are practical recommendations rather than a formal prompt grammar. Advice remains visible but does not block saving an incomplete idea. Schema limits and valid types do block malformed storage.
 
@@ -36,6 +36,10 @@ No defensible traffic ranking was available, so these are established publicly d
 - [Styles Prompt Master guide](https://stylespromptmaster.com/guide): presets and a prompt vault emphasize recall and reuse. Search results exposed this description, but the page had no readable content; it was not used to assert detailed feature behavior.
 
 The differentiator here is complete setting snapshots, immutable revisions, result ratings and explicit one-change production notes. No external AI request is made for advice, keeping deployment inexpensive and private.
+
+### English-language contract
+
+All application-owned labels, hints, guidance, validation, notifications, exports and documentation use English. `shared/presentation.ts` fixes dates and numbers to `en-US` instead of inheriting the browser language, while retaining the user's local time zone. Field labels cover every schema field, including guidance filters and version comparison. Shared account validation avoids localized native-browser validation bubbles, and controlled import/connection messages avoid exposing localized browser exception text. User-authored song content is preserved verbatim, including Unicode and non-English lyrics; source URLs and standard genre names remain unchanged. Browser/operating-system chrome such as the file picker and standard page-unload confirmation is outside the application's language control.
 
 ## Experience and visual system
 
@@ -63,6 +67,8 @@ Guests can edit, use presets, review coaching, copy and export/import. The priva
 
 Drafts live in React memory. Navigation that replaces a dirty draft prompts for export, continuing to edit or discarding; page unload uses the browser's standard unsaved-changes warning. Explicit save is available for partial drafts. No hidden autosaving consumes the quota. Signing out clears private records and the editor in memory. No lyrics, account tokens or saved projects enter localStorage.
 
+Library and history loads carry a request generation; saves, deletions and account-status requests also track the current account generation. Signing out or signing into another account invalidates older generations and clears cached projects and private dialogs. A delayed response from an earlier account, or from an outdated refresh, cannot replace the current account's projects, active song, quota, errors or loading state. Browser regression tests deliberately hold one account's library, history and save responses until after a second account signs in. A save already authorized by the server can still complete for its original owner; its delayed response is simply prevented from changing another user's interface.
+
 ## Architecture
 
 ```mermaid
@@ -80,10 +86,13 @@ React/TypeScript/Vite build to static assets. Node's HTTP server serves both ass
 ### Code boundaries
 
 - `shared/song.ts`: single schema, defaults, tags, original presets, deterministic advice and text handoff.
+- `shared/presentation.ts`: exhaustive English field labels, date/number formatting and pure snapshot comparison.
+- `shared/setup.ts` and `shared/identity.ts`: validated setup imports, readable validation errors and shared account credential rules.
 - `server/store.ts`: versioned DB migration, ownership checks, immutable saves, quota and optimistic conflict checks.
 - `server/app.ts`: HTTP routing, auth, sessions, validation, rate limits, security headers, static files.
 - `server/index.ts`: environment validation and graceful shutdown.
 - `src/components/ui/primitives.tsx`: locally owned shadcn composition and Radix dialog behavior.
+- `src/components/version-comparison.tsx`: read-only side-by-side changes between an earlier saved version and the latest snapshot.
 - `src/App.tsx`: composer/library/guide workflows. Render helpers are invoked as functions to avoid remounting input components on keystrokes.
 - `src/api.ts`: same-origin fetch and downloadable exports.
 - `tests/`: real HTTP/SQLite integration tests and guidance contracts.
@@ -97,6 +106,8 @@ Every successful save inserts one snapshot. Existing snapshots are never updated
 The quota is **100 snapshots per user across songs/templates**, not 100 projects plus unlimited history. `BEGIN IMMEDIATE` plus a database trigger ensures the final slot cannot be taken twice. An ownership trigger prevents inconsistent project/user associations. Foreign keys cascade project deletion. Deleting the last snapshot removes the empty project. Latest versions are ordered by insertion rowid, not wall-clock precision. Lists return only the latest snapshot and version count; history returns all retained snapshots for that owner.
 
 To update a project, the client submits the latest known `baseId`. An outdated base gives 409, preserving the local draft. Loading an old snapshot records the current latest base; a subsequent save inserts a new latest snapshot without mutating its source. Using any project as a template starts a detached song, retains sound/context and lyrics, and clears outcome-specific title, rating, favorite, result link and listening notes.
+
+Version history also offers a read-only comparison of any earlier snapshot with the latest saved version. The comparison lists only fields whose stored values differ, including lyrics and listening notes. Values have English labels and appropriate units; empty values and unrated results are explicit. Identical snapshots have an empty-state explanation. The comparison is computed from already owner-scoped history in the browser: no additional database writes, API endpoints, migrations or quota usage are introduced. On mobile, the earlier/latest values stack vertically.
 
 ### API
 

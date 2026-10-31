@@ -11,7 +11,14 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - [x] 7. Operations: multi-stage non-root Docker image, Compose health check and volume, Coolify instructions, backup/restore and maintenance guidance.
 - [x] 8. Verification: typecheck, production build, API integration tests covering identity/isolation/quota/versioning/CSRF, guidance tests, available UI verification; push implementation to GitHub.
 
-## Evidence and progress
+## Follow-up implementation chunks
+
+- [x] 9. English-language audit: fixed English date/number formatting, readable labels for every field, shared account validation, controlled import/network errors and English documentation.
+- [x] 10. Version comparison: compare earlier snapshots against the latest version with exact per-field changes; preserve saved data and storage usage.
+- [x] 11. Account request consistency: ignore delayed responses after sign-out, account changes or a newer refresh, keeping each user's workspace private.
+- [ ] 12. Verify follow-up: API/presentation tests, non-English-browser regression coverage, version-comparison and delayed-account-response browser workflows, production build and push to main.
+
+## Verification record
 
 - 2026-10-31: repository inspected (initial LICENSE only). Research retrieved from Sonoya, Suno help and comparable builders. Implementation started.
 - 2026-10-31: chunks 1–7 implemented. `npm test`: 6 tests passed, including ownership isolation, immutable history, optimistic concurrency, a race for slot 100, schema limits, CSRF, session expiry, throttling and conditional handoff.
@@ -20,6 +27,10 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - 2026-10-31: Docker image built successfully. Runtime checked with non-root `node`, readonly root filesystem, 384 MB cap, dropped capabilities and writable named volume. Health check passed. Saved data survived container restart. SQLite `VACUUM INTO` backup passed `PRAGMA integrity_check` and retained saved content. Operator password reset and subsequent login passed.
 - 2026-10-31: final Chromium suite passed again after adding mobile account/sign-out access. Final Docker rebuild passed after cleaning this session's temporary Docker build cache (an intermediate attempt exhausted this environment's disk). Runtime health also passed for the final image. An earlier idle runtime sample used approximately 24 MiB; this is an observation, not a production sizing guarantee.
 - 2026-10-31: GitHub write access confirmed after the earlier blocked synchronization attempt. Implementation commit `55a6f9b` and verification record `c2f1f29` successfully pushed to `drhdev/sunomat` branch `main` using a normal fast-forward push. All eight implementation chunks are complete.
+- 2026-10-31 follow-up: completed the English-language audit. App-owned labels, date/number formatting, account validation and import/connection errors use English. User-authored song content, source URLs and conventional genre names are preserved. Added exhaustive field labels and shared import/credential validation without database changes or new dependencies.
+- 2026-10-31 follow-up: added read-only saved-version comparison, including lyrics, controls, references and production notes. Mobile comparison stacks earlier/latest values and the browser test verifies that comparison leaves quota usage unchanged.
+- 2026-10-31 follow-up: scoped asynchronous library/history/save/delete/account-status results to the current account. Three browser cases hold an earlier user's library, history and save responses until after another account signs in and confirm the private workspace remains empty for the new account.
+- 2026-10-31 follow-up checks: `npm test` passed 10 tests; production build/typecheck passed; Chromium passed 7 workflows, including a `de-DE` browser with English counters, account validation, dates and connection errors, plus mobile version comparison. Browser JS remains approximately 139 KB gzip; no database migration or additional runtime service is required. Chunk 12 awaits only remote synchronization of this follow-up.
 - Actual Coolify deployment/domain TLS cannot be verified without access to the user's Coolify server; deployment is an operator step, not an unfinished code chunk.
 
 ## Follow-up procedure

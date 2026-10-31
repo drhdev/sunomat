@@ -16,16 +16,11 @@ import { resolve, extname } from "node:path";
 import { z } from "zod";
 import { songSchema } from "../shared/song.js";
 import { ApiError, createStore } from "./store.js";
+import { credentialsSchema } from "../shared/identity.js";
+import { formatValidationError } from "../shared/setup.js";
 
 const scrypt = promisify(scryptCallback);
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
-const authSchema = z.object({
-  email: z
-    .email()
-    .max(254)
-    .transform((s) => s.toLowerCase()),
-  password: z.string().min(12, "Use at least 12 characters").max(128),
-});
 const saveSchema = z.object({
   song: songSchema,
   projectId: z.uuid().optional(),
@@ -167,7 +162,7 @@ export function createApp(config: Config) {
           ["/api/register", "/api/login"].includes(path) &&
           method === "POST"
         ) {
-          const data = authSchema.parse(await body(req));
+          const data = credentialsSchema.parse(await body(req));
           rate(`email:${data.email}`, 12);
           // socket identity cannot be spoofed with X-Forwarded-For; a proxy shares the broader IP allowance.
           rate(`ip:${req.socket.remoteAddress || "unknown"}`, 150);
@@ -340,9 +335,7 @@ export function createApp(config: Config) {
       }
       if (e instanceof z.ZodError) {
         json(res, 400, {
-          error: e.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; "),
+          error: formatValidationError(e),
         });
         return;
       }
