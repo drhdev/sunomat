@@ -9,7 +9,7 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - [x] 5. Guidance: sourced deterministic per-field advice, examples, contradictions, counters, repeatability checks; distinguish suggestions from requirements.
 - [x] 6. Library: private search/filter, favorites, templates, revisions, restore, delete, quota display and unsaved-change protection.
 - [x] 7. Operations: multi-stage non-root Docker image, Compose health check and volume, Coolify instructions, backup/restore and maintenance guidance.
-- [ ] 8. Verification: typecheck, production build, API integration tests covering identity/isolation/quota/versioning/CSRF, guidance tests, available UI verification; push implementation to GitHub.
+- [x] 8. Verification: typecheck, production build, API integration tests covering identity/isolation/quota/versioning/CSRF, guidance tests, available UI verification; push implementation to GitHub.
 
 ## Evidence and progress
 
@@ -19,7 +19,7 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - 2026-10-31: Chromium workflows passed (3 committed Playwright tests): account/private library/revisions/template/deletion/logout; 375px dark layout/audio controls/tempo merge/dirty guard; JSON import, invalid import handling, clipboard and TXT export. Additional interactive browser run covered the same core workflow with no page runtime errors. Desktop and mobile screenshots inspected.
 - 2026-10-31: Docker image built successfully. Runtime checked with non-root `node`, readonly root filesystem, 384 MB cap, dropped capabilities and writable named volume. Health check passed. Saved data survived container restart. SQLite `VACUUM INTO` backup passed `PRAGMA integrity_check` and retained saved content. Operator password reset and subsequent login passed.
 - 2026-10-31: final Chromium suite passed again after adding mobile account/sign-out access. Final Docker rebuild passed after cleaning this session's temporary Docker build cache (an intermediate attempt exhausted this environment's disk). Runtime health also passed for the final image. An earlier idle runtime sample used approximately 24 MiB; this is an observation, not a production sizing guarantee.
-- 2026-10-31: implementation committed locally as `55a6f9b`. Git push to `drhdev/sunomat` was denied with HTTP 403. A write attempt through the connected GitHub app was not approved (`user rejected MCP tool call`). No alternate account or forced write was attempted. Chunk 8 remains unchecked **only for remote synchronization**. Local source ZIP and Git bundle are prepared for handoff.
+- 2026-10-31: GitHub write access confirmed after the earlier blocked synchronization attempt. Implementation commit `55a6f9b` and verification record `c2f1f29` successfully pushed to `drhdev/sunomat` branch `main` using a normal fast-forward push. All eight implementation chunks are complete.
 - Actual Coolify deployment/domain TLS cannot be verified without access to the user's Coolify server; deployment is an operator step, not an unfinished code chunk.
 
 ## Follow-up procedure
