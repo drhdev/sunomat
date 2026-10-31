@@ -64,7 +64,7 @@ import {
 } from "../shared/presentation";
 import { formatValidationError, parseSetup } from "../shared/setup";
 import { credentialsSchema } from "../shared/identity";
-import { VersionComparison } from "./components/version-comparison";
+import { VersionComparison, type Comparison } from "./components/version-comparison";
 import { LibraryTransfer } from "./components/library-transfer";
 import { selectProjects, type LibrarySort } from "../shared/library-view";
 import { AccountSettings } from "./components/account-settings";
@@ -137,10 +137,7 @@ export default function App() {
   });
   const [history, setHistory] = useState<Saved[] | null>(null);
   const [historyName, setHistoryName] = useState("");
-  const [comparison, setComparison] = useState<{
-    before: Saved;
-    after: Saved;
-  } | null>(null);
+  const [comparison, setComparison] = useState<Comparison | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     type: "project" | "version";
@@ -813,6 +810,18 @@ export default function App() {
                   </p>
                 </div>
                 <div className="heading-actions">
+                  {active && (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() =>
+                        setComparison({ before: active, draft: { ...song } })
+                      }
+                    >
+                      <GitCompareArrows size={15} />
+                      Review changes
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => setHandoffOpen(true)}

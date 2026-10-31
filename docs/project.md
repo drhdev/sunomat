@@ -61,6 +61,10 @@ Desktop: persistent workspace navigation; four editing sections; a live song pre
 
 Character counters and schema contracts guard the major text limits. Cross-field rules catch unwanted elements in Style, repeated descriptors, conflicting exclusions, vocal/instrumental conflicts, missing structure, unbalanced brackets, likely sung instructions, overloaded prompts and missing repeatability notes. The guide screen shows all advice; the composer shows four focused entries with a field filter. Warnings are advisory, not scored predictions.
 
+### Reviewing a production change
+
+After loading or saving a project, **Review changes** compares the current draft against that exact loaded/saved snapshot. All changed fields appear with their original and current values, including lyrics and production notes. Closing the review preserves every edit. The review never writes data or uses quota; saving remains a separate explicit action. Loading an older revision compares against that older snapshot, not the latest server revision. The dialog explains this distinction; the existing optimistic save check still protects against conflicting newer saves. After a successful save, that new snapshot becomes the baseline. A new, imported or detached template draft has no saved baseline and does not show this action. Identical settings remain visible as a zero-change review; users may still save a deliberate repeated experiment.
+
 ### Finding successful setups
 
 The private library combines project type, favorite or production-stage filtering with a minimum result rating. Sort the latest saved snapshots by newest/oldest save, highest rating (newest first for ties), or English title order with numeric handling. Search includes title, style, Simple Mode prompt, listening notes, change notes, reference notes, persona, voice and stable project name. Search is case-insensitive and ignores surrounding whitespace. Filters inspect the latest snapshot only; earlier settings remain available through version history. These controls never save revisions or consume quota. Their state stays in memory and resets on sign-out; no private search is stored in the browser.

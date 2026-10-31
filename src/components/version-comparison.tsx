@@ -1,25 +1,38 @@
+import type { Song } from "../../shared/song";
 import type { Saved } from "../api";
 import { compareSongs, formatSavedDate } from "../../shared/presentation";
 import { Badge, Dialog } from "./ui/primitives";
+
+export type Comparison =
+  | { before: Saved; after: Saved }
+  | { before: Saved; draft: Song };
 
 export function VersionComparison({
   versions,
   onClose,
 }: {
-  versions: { before: Saved; after: Saved } | null;
+  versions: Comparison | null;
   onClose: () => void;
 }) {
-  const changes = versions
-    ? compareSongs(versions.before.song, versions.after.song)
-    : [];
+  const isDraft = versions !== null && "draft" in versions;
+  const after =
+    versions && ("draft" in versions ? versions.draft : versions.after.song);
+  const changes =
+    versions && after ? compareSongs(versions.before.song, after) : [];
+  const beforeLabel = isDraft ? "Loaded snapshot" : "Earlier";
+  const afterLabel = isDraft ? "Current draft" : "Latest";
   return (
     <Dialog
       open={Boolean(versions)}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="Compare saved versions"
-      description="Review the exact changes between an earlier snapshot and the latest saved version. Comparing does not save or modify either version."
+      title={isDraft ? "Review draft changes" : "Compare saved versions"}
+      description={
+        isDraft
+          ? "Compare your current draft with the saved snapshot you loaded. This is not a check against newer saves in another tab. Reviewing does not save or use a version slot."
+          : "Review the exact changes between an earlier snapshot and the latest saved version. Comparing does not save or modify either version."
+      }
     >
       {versions && (
         <>
@@ -28,21 +41,29 @@ export function VersionComparison({
               {changes.length}{" "}
               {changes.length === 1 ? "field changed" : "fields changed"}
             </Badge>
-            <p>{versions.after.song.title || "Untitled idea"}</p>
+            <p>{after?.title || "Untitled idea"}</p>
           </div>
           <div className="comparison-dates">
             <p>
-              <strong>Earlier version</strong>
+              <strong>
+                {isDraft ? "Loaded saved snapshot" : "Earlier version"}
+              </strong>
               <span>{formatSavedDate(versions.before.createdAt)}</span>
             </p>
             <p>
-              <strong>Latest version</strong>
-              <span>{formatSavedDate(versions.after.createdAt)}</span>
+              <strong>{isDraft ? "Current draft" : "Latest version"}</strong>
+              <span>
+                {"draft" in versions
+                  ? "Not saved"
+                  : formatSavedDate(versions.after.createdAt)}
+              </span>
             </p>
           </div>
           {changes.length === 0 ? (
             <p className="comparison-empty">
-              These versions have identical settings and production notes.
+              {isDraft
+                ? "No changes since the loaded snapshot."
+                : "These versions have identical settings and production notes."}
             </p>
           ) : (
             <div className="comparison-list">
@@ -54,11 +75,11 @@ export function VersionComparison({
                   <h3>{change.label}</h3>
                   <div className="comparison-values">
                     <div>
-                      <span>Earlier</span>
+                      <span>{beforeLabel}</span>
                       <pre>{change.before}</pre>
                     </div>
                     <div>
-                      <span>Latest</span>
+                      <span>{afterLabel}</span>
                       <pre>{change.after}</pre>
                     </div>
                   </div>

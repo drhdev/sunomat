@@ -35,7 +35,14 @@ Execute chunks in order. Before marking a chunk complete, run its acceptance che
 - [x] 19. Library discovery: combined minimum-rating and project filters, all production stages, stable date/rating/title sorting and context search, without changing saved snapshots.
 - [x] 20. Verify and deliver discovery: unit and mobile browser coverage, full regression checks, production build, documentation and push to main.
 
+## Draft review chunks
+
+- [x] 21. Draft review: reuse exact field comparison to review the composer against its loaded saved snapshot, including older revisions, without saving or consuming quota.
+- [ ] 22. Verify and deliver draft review: mobile baseline/edits/save/template browser coverage, existing regressions, production build, documentation and push to main.
+
 ## Verification record
+
+- 2026-10-31 draft review: added read-only exact field comparison of the current composer against its loaded saved snapshot, with explicit baseline/date labels and no quota use. The baseline updates after successful saving; new/imported/template drafts remain detached. `npm test` passed 22 tests; production build/typecheck passed; Chromium passed all 12 workflows, including editing an older revision at 375px, retaining edits after review, saving as a new latest version and template detachment. Header actions wrap on narrow screens. Browser JS is approximately 143 KB gzip. No migrations, dependencies or runtime services were added.
 
 - 2026-10-31 library discovery: added combined minimum-rating and project/stage filters, numeric English title/date/rating sorting and context search over latest snapshots. `npm test` passed 22 tests; production build/typecheck passed; Chromium passed all 11 workflows, including combined filters at 375px, empty results, no horizontal overflow and unchanged storage usage. Browser JS is approximately 143 KB gzip. No dependencies, migrations or runtime services were added. Implementation commit `ebdf83f` was successfully pushed to `main`; discovery chunks 19–20 are complete.
 
